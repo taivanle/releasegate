@@ -37,7 +37,8 @@ Browser -> Server Components (reads) --+
 ```
 
 - **Next.js 16 App Router**, TypeScript, Tailwind v4, shadcn/ui. No API routes; mutations are Server Actions.
-- **`lib/policy.ts`**: thresholds, `evaluatePolicy`, `getReadiness`, `canApprove`, `canReject`. No I/O.
+- **`lib/policy.ts`**: thresholds, `evaluatePolicy`, `getReadiness`, `canApprove`, `canReject`,
+  `canSubmitEvaluation`. No I/O.
 - **`lib/schemas.ts`**: zod validation, run on the server for every action. Empty numeric fields are
   rejected rather than coerced to 0.
 - **`lib/releases.ts`**: SQL via `postgres` over Supabase's transaction pooler. Server-only.
@@ -70,11 +71,34 @@ npm run dev
 ```
 
 ```bash
-npm test           # policy, approval and validation unit tests (Vitest)
+npm test           # policy, approval and validation unit tests (DB tests skip without TEST_DATABASE_URL)
 npm run typecheck
 npm run lint
 npm run build
 ```
+
+`lib/releases.db.test.ts` tests the data layer against a real Postgres: approval only of the latest
+passing evaluation, stale-evaluation refusal, one decision when two approvals race, append-only
+triggers, and duplicate or malformed IDs. It is skipped unless `TEST_DATABASE_URL` points at a
+local database whose name contains `test`, because it recreates the schema:
+
+```bash
+docker run -d --name releasegate-test-db -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=releasegate_test -p 127.0.0.1:54329:5432 postgres:17-alpine
+TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/releasegate_test npm run test:db
+```
+
+## Demo data
+
+The live deployment holds two demonstration releases, created through the app's normal UI and
+server actions (no direct database writes). Both are labelled: the model name starts with `demo-`,
+the owner is "Demo data" and the use case starts with "Demonstration record".
+
+- `demo-support-reply-drafter` 2.1.0 is **blocked**: its evaluation fails the quality and safety checks.
+- `demo-contract-summarizer` 1.4.0 is **approved**: a failing evaluation, a passing re-evaluation,
+  then an approval, all visible in its audit trail.
+
+Dashboard counts are computed from the stored records; nothing is hard-coded in the frontend.
 
 ## MVP limitations
 
@@ -83,6 +107,10 @@ npm run build
 - Fixed policy thresholds; no per-tier or per-team configuration.
 - Results are entered by hand; no CI, webhook or API ingestion.
 - No editing or deleting of releases or evaluations, by design.
+- Append-only is enforced against the application, not the database owner role, which can still
+  disable triggers or `TRUNCATE`. Smoke-test records from deployment verification were removed
+  before launch by temporarily disabling the triggers in a single transaction.
+- No pagination: the dashboard loads every release.
 - Unknown release IDs render the not-found page with HTTP 200, because the lookup streams inside a
   Suspense boundary.
 - Supabase free-tier projects pause after a period of inactivity.

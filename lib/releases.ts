@@ -74,7 +74,6 @@ export async function listReleases(): Promise<ReleaseSummary[]> {
       limit 1
     ) e on true
     order by r.created_at desc
-    limit 200
   `;
   return rows.map(({ latestPassed, ...r }) => ({
     ...r,
@@ -134,6 +133,8 @@ export async function createRelease(input: CreateReleaseInput): Promise<Mutation
 
 // Locks the release row so evaluation submits and decisions on one release are serialized.
 async function lockRelease(sql: postgres.TransactionSql, id: string) {
+  // The id is a client-bound action argument; reject malformed ids before Postgres does.
+  if (!UUID.test(id)) throw new RuleViolation("Release not found.");
   const [release] = await sql<Pick<Release, "id" | "status">[]>`
     select id, status from releases where id = ${id} for update
   `;
