@@ -1,20 +1,23 @@
+import { Ban, CircleCheck, CircleDashed, Hourglass, OctagonX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Readiness } from "@/lib/policy";
 
-const styles: Record<Readiness, { label: string; className: string }> = {
-  not_evaluated: { label: "Not evaluated", className: "border-border bg-muted text-muted-foreground" },
-  blocked: { label: "Blocked", className: "border-red-600/20 bg-red-600/10 text-red-700 dark:text-red-400" },
-  ready: { label: "Ready", className: "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300" },
-  approved: { label: "Approved", className: "border-emerald-600/20 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400" },
-  rejected: { label: "Rejected", className: "border-zinc-500/30 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300" },
+// Colour is always paired with an icon and a label.
+export const readinessStyles: Record<Readiness, { label: string; icon: typeof Ban; className: string }> = {
+  not_evaluated: { label: "Not evaluated", icon: CircleDashed, className: "border-line-strong bg-transparent text-muted-foreground" },
+  blocked: { label: "Blocked", icon: OctagonX, className: "border-danger-line bg-danger-surface text-danger" },
+  ready: { label: "Ready", icon: Hourglass, className: "border-warning-line bg-warning-surface text-warning" },
+  approved: { label: "Approved", icon: CircleCheck, className: "border-success-line bg-success-surface text-success" },
+  rejected: { label: "Rejected", icon: Ban, className: "border-danger-line bg-danger-surface text-danger" },
 };
 
 export function StatusBadge({ readiness, className }: { readiness: Readiness; className?: string }) {
-  const s = styles[readiness];
+  const { label, icon: Icon, className: tone } = readinessStyles[readiness];
   return (
-    <Badge variant="outline" className={cn(s.className, className)}>
-      {s.label}
+    <Badge variant="outline" className={cn("h-6 gap-1.5 px-2.5", tone, className)}>
+      <Icon aria-hidden />
+      {label}
     </Badge>
   );
 }

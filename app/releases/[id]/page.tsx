@@ -2,19 +2,20 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { ArrowLeft, CheckCircle2, CircleSlash, FilePlus2, FlaskConical, XCircle } from "lucide-react";
+import { ArrowLeft, Ban, CircleCheck, FilePlus2, FlaskConical, Hourglass, OctagonX, XCircle } from "lucide-react";
 import { DecisionForm } from "@/components/decision-form";
 import { EvaluationForm } from "@/components/evaluation-form";
 import { formatDate, StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { canApprove, POLICY_VERSION } from "@/lib/policy";
-import { getRelease, type AuditEvent, type Evaluation } from "@/lib/releases";
+import { canApprove, POLICY_VERSION, type ReleaseStatus } from "@/lib/policy";
+import { getRelease, type AuditEvent, type Evaluation, type Release } from "@/lib/releases";
+import { cn } from "@/lib/utils";
 
 export default function ReleasePage({ params }: PageProps<"/releases/[id]">) {
   return (
-    <div className="grid gap-6">
-      <Link href="/" className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm">
+    <div className="grid gap-8">
+      <Link href="/" className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1.5 rounded-full text-sm transition-colors">
         <ArrowLeft className="size-4" aria-hidden /> All releases
       </Link>
       <Suspense fallback={<DetailSkeleton />}>
@@ -39,39 +40,50 @@ async function ReleaseDetail({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight break-all">{release.modelName}</h1>
-            <span className="text-muted-foreground font-mono text-sm">v{release.version}</span>
-            <StatusBadge readiness={readiness} />
-          </div>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Owner {release.owner} · <span className="capitalize">{release.riskTier}</span> risk · Created{" "}
-            {formatDate(release.createdAt)}
-          </p>
-          <p className="mt-2 max-w-2xl text-sm">{release.useCase}</p>
+      <header className="grid gap-5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="text-3xl font-medium tracking-[-0.03em] wrap-anywhere sm:text-4xl">{release.modelName}</h1>
+          <span className="border-line-strong text-ink-soft rounded-full border px-2.5 py-0.5 font-mono text-xs">
+            v{release.version}
+          </span>
+          <StatusBadge readiness={readiness} />
         </div>
-      </div>
+        <p className="text-ink-soft max-w-2xl">{release.useCase}</p>
+        <dl className="flex flex-wrap gap-x-10 gap-y-3 text-sm">
+          <Meta label="Owner">{release.owner}</Meta>
+          <Meta label="Risk tier">
+            <span className="capitalize">{release.riskTier}</span>
+          </Meta>
+          <Meta label="Created">
+            <time dateTime={release.createdAt.toISOString()} className="tabular-nums">
+              {formatDate(release.createdAt)}
+            </time>
+          </Meta>
+        </dl>
+      </header>
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="grid gap-6 lg:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle>Release readiness</CardTitle>
+              <CardTitle>
+                <h2>Release readiness</h2>
+              </CardTitle>
               <CardDescription>
                 Policy {POLICY_VERSION}: four mandatory checks, evaluated against the latest results.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {latest ? <Checks evaluation={latest} pending={release.status === "pending"} /> : <NoEvaluation />}
+              {latest ? <Checks evaluation={latest} status={release.status} /> : <NoEvaluation />}
             </CardContent>
           </Card>
 
           {release.status === "pending" && (
             <Card>
               <CardHeader>
-                <CardTitle>{latest ? "Submit new results" : "Submit evaluation results"}</CardTitle>
+                <CardTitle>
+                  <h2>{latest ? "Submit new results" : "Submit evaluation results"}</h2>
+                </CardTitle>
                 <CardDescription>
                   Results are append-only. Re-submitting adds a new evaluation and the latest one is used for approval.
                 </CardDescription>
@@ -86,7 +98,9 @@ async function ReleaseDetail({ params }: { params: Promise<{ id: string }> }) {
         <div className="grid gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Decision</CardTitle>
+              <CardTitle>
+                <h2>Decision</h2>
+              </CardTitle>
               {release.status === "pending" && (
                 <CardDescription>Approval unlocks only when every mandatory check passes.</CardDescription>
               )}
@@ -99,20 +113,16 @@ async function ReleaseDetail({ params }: { params: Promise<{ id: string }> }) {
                   approveBlockedReason={approval.ok ? null : approval.reason}
                 />
               ) : (
-                <div className="grid gap-1 text-sm">
-                  <p>
-                    <span className="font-medium capitalize">{release.status}</span> by {release.decidedBy}
-                  </p>
-                  {release.decidedAt && <p className="text-muted-foreground text-xs">{formatDate(release.decidedAt)}</p>}
-                  {release.decisionNote && <p className="mt-2 border-l-2 pl-3">{release.decisionNote}</p>}
-                </div>
+                <DecisionSummary release={release} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Audit trail</CardTitle>
+              <CardTitle>
+                <h2>Audit trail</h2>
+              </CardTitle>
               <CardDescription>Append-only record of every action on this release.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -125,52 +135,103 @@ async function ReleaseDetail({ params }: { params: Promise<{ id: string }> }) {
   );
 }
 
-function NoEvaluation() {
+function Meta({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="text-muted-foreground grid place-items-center gap-2 rounded-lg border border-dashed py-10 text-center text-sm">
-      <FlaskConical className="size-6" aria-hidden />
-      <p>No evaluation results yet. Submit results below to check this release against the policy.</p>
+    <div className="grid gap-1">
+      <dt className="text-faint text-xs">{label}</dt>
+      <dd>{children}</dd>
     </div>
   );
 }
 
-function Checks({ evaluation, pending }: { evaluation: Evaluation; pending: boolean }) {
-  const blockers = evaluation.checks.filter((c) => c.blocker);
+function NoEvaluation() {
   return (
-    <div className="grid gap-4">
+    <div className="border-line-strong text-muted-foreground grid place-items-center gap-3 rounded-xl border border-dashed px-4 py-10 text-center text-sm">
+      <FlaskConical className="text-primary size-6" aria-hidden />
+      <p className="max-w-sm">No evaluation results yet. Submit results below to check this release against the policy.</p>
+    </div>
+  );
+}
+
+const verdictTone = {
+  pending: { icon: Hourglass, className: "border-warning-line bg-warning-surface", iconClassName: "text-warning" },
+  approved: { icon: CircleCheck, className: "border-success-line bg-success-surface", iconClassName: "text-success" },
+  rejected: { icon: CircleCheck, className: "border-border bg-raised", iconClassName: "text-muted-foreground" },
+} satisfies Record<ReleaseStatus, { icon: typeof CircleCheck; className: string; iconClassName: string }>;
+
+function Checks({ evaluation, status }: { evaluation: Evaluation; status: ReleaseStatus }) {
+  const blockers = evaluation.checks.filter((c) => c.blocker);
+  const tone = verdictTone[status];
+  return (
+    <div className="grid gap-5">
       {blockers.length > 0 ? (
-        <div role="alert" className="rounded-lg border border-red-600/20 bg-red-600/5 p-3">
-          <p className="text-sm font-medium text-red-700 dark:text-red-400">
+        <div role="alert" className="border-danger-line bg-danger-surface grid gap-3 rounded-xl border p-4">
+          <p className="text-danger flex items-start gap-2 font-medium">
+            <OctagonX className="mt-0.5 size-4 shrink-0" aria-hidden />
             {blockers.length} {blockers.length === 1 ? "blocker" : "blockers"} must be resolved before approval
           </p>
-          <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm">
+          <ul className="grid list-disc gap-1.5 pl-6 text-sm leading-relaxed marker:text-danger">
             {blockers.map((c) => (
               <li key={c.id}>{c.blocker}</li>
             ))}
           </ul>
         </div>
       ) : (
-        <p className="rounded-lg border border-emerald-600/20 bg-emerald-600/5 p-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-          All mandatory checks pass.{pending && " This release can be approved."}
+        <p className={cn("flex items-start gap-2 rounded-xl border p-4 font-medium", tone.className)}>
+          <tone.icon className={cn("mt-0.5 size-4 shrink-0", tone.iconClassName)} aria-hidden />
+          All mandatory checks pass.{status === "pending" && " This release can be approved."}
         </p>
       )}
-      <ul className="divide-y rounded-lg border">
+      <ul className="border-border divide-border divide-y rounded-xl border">
         {evaluation.checks.map((c) => (
-          <li key={c.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+          <li key={c.id} className="flex items-center gap-3 px-4 py-3 text-sm">
             {c.passed ? (
-              <CheckCircle2 className="size-4 shrink-0 text-emerald-600" aria-label="Passed" />
+              <CircleCheck className="text-success size-4 shrink-0" role="img" aria-label="Passed" />
             ) : (
-              <XCircle className="size-4 shrink-0 text-red-600" aria-label="Failed" />
+              <XCircle className="text-danger size-4 shrink-0" role="img" aria-label="Failed" />
             )}
             <span className="flex-1">{c.label}</span>
-            <span className="font-mono tabular-nums">{c.actual}</span>
-            <span className="text-muted-foreground w-20 text-right font-mono text-xs">{c.threshold}</span>
+            <span className="flex flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-6">
+              <span className={cn("font-mono tabular-nums", !c.passed && "text-danger")}>{c.actual}</span>
+              <span className="text-faint font-mono text-xs tabular-nums sm:w-24 sm:text-right">{c.threshold}</span>
+            </span>
           </li>
         ))}
       </ul>
-      <p className="text-muted-foreground text-xs">
-        Latest results submitted by {evaluation.submittedBy} on {formatDate(evaluation.createdAt)}.
+      <p className="text-faint text-xs">
+        Latest results submitted by {evaluation.submittedBy} on{" "}
+        <time dateTime={evaluation.createdAt.toISOString()} className="tabular-nums">
+          {formatDate(evaluation.createdAt)}
+        </time>
+        .
       </p>
+    </div>
+  );
+}
+
+function DecisionSummary({ release }: { release: Release }) {
+  const approved = release.status === "approved";
+  const Icon = approved ? CircleCheck : Ban;
+  return (
+    <div
+      className={cn(
+        "grid gap-2 rounded-xl border p-4 text-sm",
+        approved ? "border-success-line bg-success-surface" : "border-danger-line bg-danger-surface",
+      )}
+    >
+      <p className="flex items-center gap-2">
+        <Icon className={cn("size-4 shrink-0", approved ? "text-success" : "text-danger")} aria-hidden />
+        <span>
+          <span className={cn("font-medium capitalize", approved ? "text-success" : "text-danger")}>{release.status}</span> by{" "}
+          {release.decidedBy}
+        </span>
+      </p>
+      {release.decidedAt && (
+        <time dateTime={release.decidedAt.toISOString()} className="text-muted-foreground text-xs tabular-nums">
+          {formatDate(release.decidedAt)}
+        </time>
+      )}
+      {release.decisionNote && <p className="text-ink-soft">“{release.decisionNote}”</p>}
     </div>
   );
 }
@@ -178,30 +239,44 @@ function Checks({ evaluation, pending }: { evaluation: Evaluation; pending: bool
 const eventMeta = {
   release_created: { icon: FilePlus2, title: "Release created" },
   evaluation_submitted: { icon: FlaskConical, title: "Evaluation submitted" },
-  release_approved: { icon: CheckCircle2, title: "Release approved" },
-  release_rejected: { icon: CircleSlash, title: "Release rejected" },
+  release_approved: { icon: CircleCheck, title: "Release approved" },
+  release_rejected: { icon: Ban, title: "Release rejected" },
 } satisfies Record<AuditEvent["action"], { icon: unknown; title: string }>;
+
+function eventTone(e: AuditEvent, passed: boolean | undefined) {
+  if (e.action === "release_approved") return "text-success";
+  if (e.action === "release_rejected") return "text-danger";
+  if (e.action === "evaluation_submitted") return passed ? "text-success" : "text-danger";
+  return "text-muted-foreground";
+}
 
 function AuditTimeline({ events }: { events: AuditEvent[] }) {
   return (
-    <ol className="grid gap-4">
-      {events.map((e) => {
+    <ol className="grid gap-5">
+      {events.map((e, i) => {
         const { icon: Icon, title } = eventMeta[e.action];
         const d = e.details as { passed?: boolean; failedChecks?: string[]; note?: string | null };
         return (
-          <li key={e.id} className="flex gap-3 text-sm">
-            <Icon className="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden />
-            <div className="min-w-0">
-              <p>
-                <span className="font-medium">{title}</span> by {e.actor}
+          <li key={e.id} className="relative grid grid-cols-[1.75rem_1fr] gap-3 text-sm">
+            {i < events.length - 1 && (
+              <span aria-hidden className="bg-border absolute top-8 -bottom-5 left-3.5 w-px -translate-x-1/2" />
+            )}
+            <span className="bg-raised ring-border grid size-7 place-items-center rounded-full ring-1">
+              <Icon className={cn("size-3.5", eventTone(e, d.passed))} aria-hidden />
+            </span>
+            <div className="grid min-w-0 gap-0.5 pt-1">
+              <p className="leading-snug">
+                <span className="font-medium">{title}</span> <span className="text-ink-soft">by {e.actor}</span>
               </p>
               {e.action === "evaluation_submitted" && (
-                <p className={d.passed ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}>
+                <p className={d.passed ? "text-success" : "text-danger"}>
                   {d.passed ? "All checks passed" : `Failed: ${d.failedChecks?.join(", ")}`}
                 </p>
               )}
-              {d.note && <p className="text-muted-foreground wrap-break-word">“{d.note}”</p>}
-              <p className="text-muted-foreground text-xs">{formatDate(e.createdAt)}</p>
+              {d.note && <p className="text-ink-soft wrap-break-word">“{d.note}”</p>}
+              <time dateTime={e.createdAt.toISOString()} className="text-faint text-xs tabular-nums">
+                {formatDate(e.createdAt)}
+              </time>
             </div>
           </li>
         );
@@ -212,11 +287,14 @@ function AuditTimeline({ events }: { events: AuditEvent[] }) {
 
 function DetailSkeleton() {
   return (
-    <div className="grid gap-6" aria-busy="true" aria-label="Loading release">
-      <Skeleton className="h-16 w-2/3 rounded-lg" />
+    <div className="grid gap-8" aria-busy="true" aria-label="Loading release">
+      <div className="grid gap-4">
+        <Skeleton className="h-10 w-2/3 rounded-lg" />
+        <Skeleton className="h-5 w-1/2 rounded-md" />
+      </div>
       <div className="grid gap-6 lg:grid-cols-3">
-        <Skeleton className="h-80 rounded-xl lg:col-span-2" />
-        <Skeleton className="h-80 rounded-xl" />
+        <Skeleton className="h-96 rounded-2xl lg:col-span-2" />
+        <Skeleton className="h-96 rounded-2xl" />
       </div>
     </div>
   );

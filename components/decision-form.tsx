@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { Ban, CircleCheck, Lock } from "lucide-react";
 import { decideAction, type FormState } from "@/app/releases/actions";
 import { Field, FormMessage } from "@/components/field";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ export function DecisionForm({
   );
   const v = state.values ?? {};
   const err = state.fieldErrors ?? {};
+  const blockedReason = err.evaluationId?.[0] ?? approveBlockedReason;
 
   return (
     <form action={action} className="grid gap-4" noValidate>
@@ -32,15 +34,27 @@ export function DecisionForm({
       <Field id="note" label="Note" errors={err.note} hint="Optional for approval, required to reject.">
         <Textarea id="note" name="note" defaultValue={v.note} rows={2} aria-invalid={!!err.note} />
       </Field>
-      {(err.evaluationId || approveBlockedReason) && (
-        <p className="text-muted-foreground text-xs">{err.evaluationId?.[0] ?? approveBlockedReason}</p>
+      {blockedReason && (
+        <p id="approve-blocked-reason" className="text-muted-foreground flex items-start gap-2 text-xs leading-snug">
+          <Lock className="mt-px size-3.5 shrink-0" aria-hidden />
+          {blockedReason}
+        </p>
       )}
       <FormMessage error={state.error} success={state.success} />
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" name="decision" value="approve" disabled={pending || !!approveBlockedReason}>
+        <Button
+          type="submit"
+          name="decision"
+          value="approve"
+          disabled={pending || !!approveBlockedReason}
+          aria-busy={pending}
+          aria-describedby={approveBlockedReason ? "approve-blocked-reason" : undefined}
+        >
+          {approveBlockedReason ? <Lock aria-hidden /> : <CircleCheck aria-hidden />}
           Approve release
         </Button>
-        <Button type="submit" name="decision" value="reject" variant="destructive" disabled={pending}>
+        <Button type="submit" name="decision" value="reject" variant="destructive" disabled={pending} aria-busy={pending}>
+          <Ban aria-hidden />
           Reject
         </Button>
       </div>

@@ -16,7 +16,7 @@ export function EvaluationForm({ releaseId }: { releaseId: string }) {
   const err = state.fieldErrors ?? {};
 
   return (
-    <form action={action} className="grid gap-4" noValidate>
+    <form action={action} className="grid gap-5" noValidate>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field id="qualityPassRate" label="Quality pass rate (%)" errors={err.qualityPassRate} hint={`Required: ≥ ${THRESHOLDS.minQualityPassRate}%`}>
           <Input id="qualityPassRate" name="qualityPassRate" type="number" inputMode="decimal" step="0.01" min={0} max={100} defaultValue={v.qualityPassRate} aria-invalid={!!err.qualityPassRate} required />
@@ -31,12 +31,14 @@ export function EvaluationForm({ releaseId }: { releaseId: string }) {
           <Input id="avgCostUsd" name="avgCostUsd" type="number" inputMode="decimal" step="0.0001" min={0} defaultValue={v.avgCostUsd} aria-invalid={!!err.avgCostUsd} required />
         </Field>
       </div>
-      <Field id="submittedBy" label="Submitted by" errors={err.submittedBy}>
-        <Input id="submittedBy" name="submittedBy" defaultValue={v.submittedBy} placeholder="Your name" aria-invalid={!!err.submittedBy} required />
-      </Field>
+      <div className="border-border grid gap-4 border-t pt-5 sm:grid-cols-2">
+        <Field id="submittedBy" label="Submitted by" errors={err.submittedBy}>
+          <Input id="submittedBy" name="submittedBy" defaultValue={v.submittedBy} placeholder="Your name" aria-invalid={!!err.submittedBy} required />
+        </Field>
+      </div>
       <FormMessage error={state.error} success={state.success} />
       <div>
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending} aria-busy={pending}>
           {pending ? "Evaluating…" : "Evaluate against policy"}
         </Button>
       </div>
