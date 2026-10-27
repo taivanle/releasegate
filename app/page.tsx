@@ -1,69 +1,141 @@
-import Image from "next/image";
+import Link from "next/link";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { Plus } from "lucide-react";
+import { formatDate, StatusBadge } from "@/components/status-badge";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { listReleases, type ReleaseSummary } from "@/lib/releases";
 
-export default function Home() {
+export default function DashboardPage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="grid gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Releases</h1>
+          <p className="text-muted-foreground text-sm">
+            Every AI release, its evaluation results and its approval decision in one place.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        <Link href="/releases/new" className={buttonVariants()}>
+          <Plus aria-hidden /> New release
+        </Link>
+      </div>
+      <Suspense fallback={<DashboardSkeleton />}>
+        <Dashboard />
+      </Suspense>
+    </div>
+  );
+}
+
+async function Dashboard() {
+  await connection();
+  const releases = await listReleases();
+
+  if (releases.length === 0) {
+    return (
+      <Card>
+        <CardContent className="grid place-items-center gap-3 py-16 text-center">
+          <h2 className="text-lg font-medium">No releases yet</h2>
+          <p className="text-muted-foreground max-w-sm text-sm">
+            Create a release, submit its evaluation results and ReleaseGate will check them against policy v1.
+          </p>
+          <Link href="/releases/new" className={buttonVariants()}>
+            <Plus aria-hidden /> Create your first release
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const count = (r: ReleaseSummary["readiness"]) => releases.filter((x) => x.readiness === r).length;
+  const stats = [
+    { label: "Total releases", value: releases.length },
+    { label: "Ready for approval", value: count("ready") },
+    { label: "Blocked", value: count("blocked") },
+    { label: "Approved", value: count("approved") },
+  ];
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {stats.map((s) => (
+          <Card key={s.label} size="sm">
+            <CardContent>
+              <p className="text-muted-foreground text-xs font-medium">{s.label}</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{s.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="hidden py-0 md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-4">Release</TableHead>
+              <TableHead>Owner</TableHead>
+              <TableHead>Risk tier</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="pr-4 text-right">Last activity</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {releases.map((r) => (
+              <TableRow key={r.id} className="relative">
+                <TableCell className="pl-4">
+                  <Link href={`/releases/${r.id}`} className="font-medium after:absolute after:inset-0 hover:underline">
+                    {r.modelName}
+                  </Link>{" "}
+                  <span className="text-muted-foreground font-mono text-xs">v{r.version}</span>
+                </TableCell>
+                <TableCell>{r.owner}</TableCell>
+                <TableCell className="capitalize">{r.riskTier}</TableCell>
+                <TableCell>
+                  <StatusBadge readiness={r.readiness} />
+                </TableCell>
+                <TableCell className="text-muted-foreground pr-4 text-right text-xs">
+                  {formatDate(r.decidedAt ?? r.lastEvaluatedAt ?? r.createdAt)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <ul className="grid gap-3 md:hidden">
+        {releases.map((r) => (
+          <li key={r.id}>
+            <Link href={`/releases/${r.id}`} className="bg-card ring-foreground/10 block rounded-xl p-4 ring-1">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{r.modelName}</p>
+                  <p className="text-muted-foreground font-mono text-xs">v{r.version}</p>
+                </div>
+                <StatusBadge readiness={r.readiness} />
+              </div>
+              <p className="text-muted-foreground mt-2 text-xs">
+                {r.owner} · <span className="capitalize">{r.riskTier}</span> risk
+              </p>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="grid gap-6" aria-busy="true" aria-label="Loading releases">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} className="h-20 rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="h-64 rounded-xl" />
     </div>
   );
 }
