@@ -63,7 +63,9 @@ async function ReleaseDetail({ params }: { params: Promise<{ id: string }> }) {
                 Policy {POLICY_VERSION}: four mandatory checks, evaluated against the latest results.
               </CardDescription>
             </CardHeader>
-            <CardContent>{latest ? <Checks evaluation={latest} /> : <NoEvaluation />}</CardContent>
+            <CardContent>
+              {latest ? <Checks evaluation={latest} pending={release.status === "pending"} /> : <NoEvaluation />}
+            </CardContent>
           </Card>
 
           {release.status === "pending" && (
@@ -132,7 +134,7 @@ function NoEvaluation() {
   );
 }
 
-function Checks({ evaluation }: { evaluation: Evaluation }) {
+function Checks({ evaluation, pending }: { evaluation: Evaluation; pending: boolean }) {
   const blockers = evaluation.checks.filter((c) => c.blocker);
   return (
     <div className="grid gap-4">
@@ -149,7 +151,7 @@ function Checks({ evaluation }: { evaluation: Evaluation }) {
         </div>
       ) : (
         <p className="rounded-lg border border-emerald-600/20 bg-emerald-600/5 p-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-          All mandatory checks pass. This release can be approved.
+          All mandatory checks pass.{pending && " This release can be approved."}
         </p>
       )}
       <ul className="divide-y rounded-lg border">
@@ -198,7 +200,7 @@ function AuditTimeline({ events }: { events: AuditEvent[] }) {
                   {d.passed ? "All checks passed" : `Failed: ${d.failedChecks?.join(", ")}`}
                 </p>
               )}
-              {d.note && <p className="text-muted-foreground break-words">“{d.note}”</p>}
+              {d.note && <p className="text-muted-foreground wrap-break-word">“{d.note}”</p>}
               <p className="text-muted-foreground text-xs">{formatDate(e.createdAt)}</p>
             </div>
           </li>
